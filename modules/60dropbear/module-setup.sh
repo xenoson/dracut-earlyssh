@@ -43,7 +43,7 @@ install() {
         ## Check for dracut.conf parameters
         if [ -z "${dropbear_port}" ]
         then
-          dropbear_port="22222"
+          dropbear_port="2222"
           dinfo "dropbear_port not set in ${dracut_dropbear_config_file}, using default (${dropbear_port})"
 cat >> ${dracut_dropbear_config_file} <<EOF
 #droppear sshd listen port
@@ -121,9 +121,6 @@ Description=Initial Ramdisk Dropbear SSH Server Daemon
 Documentation=man:dropbear(8)
 AssertFileNotEmpty=${dropbear_acl}
 AssertFileNotEmpty=${dropbear_rsa_key}
-#Before=cryptsetup.target
-Before=dracut-initqueue.service
-#After=systemd-ask-password-plymouth.path
 
 [Service]
 ExecStart=/usr/sbin/dropbear -E -F -m -s -j -k -p ${dropbear_port} -r "${dropbear_rsa_key}" -P /var/run/dropbear.pid
