@@ -1,9 +1,4 @@
 #!/bin/sh
-# -*- mode: shell-script; indent-tabs-mode: nil; sh-basic-offset: 4; -*-
-# ex: ts=8 sw=4 sts=4 et filetype=sh
 
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
-
-systemctl restart cryptsetup.target
-
-
+#https://www.freedesktop.org/wiki/Software/systemd/PasswordAgents/
+systemd-tty-ask-password-agent --query
