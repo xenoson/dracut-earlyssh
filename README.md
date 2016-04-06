@@ -15,8 +15,7 @@ This is based heavily on the work of others, in particular mk-fg.  The major cha
 this version are: adaption for RHEL 6 and the old version of dracut installed there;
 additional options for replicated the system host key or a user provided one (see the
 "dropbear_rsa_key" option, documented in earlyssh.conf); an additional utility (unlock)
-for automating the unlock process.  Finally, there is a RPM spec file which should make
-it very easy to deploy (and doesn't introduce a runtime dependency on a compiler).
+for automating the unlock process.  
 
 Users are strictly authenticated by provided SSH public keys. These can be either:
 root's ~/.ssh/authorized_keys or a custom file ("dropbear_acl" option).  Depending
@@ -30,16 +29,6 @@ fairly similar to openssh).  If using in combination with the unlock utility (se
 ### Usage
 
 First of all, you must have dropbear. CentOS/RHEL users can get this from EPEL.  
-
-You will need gcc and libblkid(-devel) installed to build console_auth and the unlock tools.
-
-- You should be able to build everything by running configure, make, make install as usual.
-  The configure script should detect and compensate for the various differences in dracut versions.
-
-- The provided RPM spec file should take care of these things for RHEL6/7
-
-- Add `dracutmodules+="dropbear-sshd"` to dracut.conf
-  (will pull in "network" module as dependency).
 
 - Check out supported dracut.conf options below.
   With no extra options, ad-hoc server rsa key will be generated (and its
@@ -57,8 +46,16 @@ You will need gcc and libblkid(-devel) installed to build console_auth and the u
   system will install a dummyroot script (if it detects dracut v004 at build-time).
   The cmdline for these versions should be `ip=dhcp netroot=dummy`. 
 
+- Put 60dropbear in to dracut modules directory, usually /lib/dracut/modules.d
+
 - Run dracut to build initramfs with the thing.
 
+- Probably you need to build the initramfs from the installer.
+  See 
+  https://bugzilla.redhat.com/show_bug.cgi?id=524727#c23
+  in how to boot the installer via grub to allow ssh logins.
+  chmod into encrypted system before rebuilding with 
+  dracut --kver kernelverinboot --force
 
 On boot, sshd will be started with:
 
@@ -92,62 +89,12 @@ probably be replaced with ash (busybox) or bash (heavy) using appropriate module
 
 
 After the system starts booting, sshd should be killed during dracut "cleanup" phase, once 
-main os init is about to run.  Connection won't be closed, but nothing should work there, 
-as initramfs gets destroyed.
+main os init is about to run.
 
-### Remote unlock via console manipulation:
-
-```console
-
-% console_peek   # to see what's on the console (e.g. which dev prompt is for)
-...
-% console_auth    # queries passphrase and sends it to console
-Passphrase:
-%
-```
-
-Boot should continue after last command, which should send entered passphrase to
-cryptsetup, waiting for it on the console, assuming its correctness.
-
-### Remote unlock using the 'unlock' binary
-The `unlock` binary takes a passphrase in stdin, reads `/etc/crypttab` and attempts to
-call `cryptsetup luksOpen` on all luks-encrypted drives that don't have a keyfile,
-passing the passphrase that unlock got in stdin to luksOpen.
-
-What this means in practice is you can do:
-```console
-% ssh root@remote.server -p 2222 unlock < passwordFile
-```
-or:
-```console
-% gpg -d password.gpg | ssh root@remote.server -p 2222 unlock
-```
-
-If you want to only unlock specific drives / LUKS volumes, you can provide wildcards on the 
-command line, eg
-```console
-% ssh root@remote.server -p 2222 unlock luks-3467c luks-34c13
-```
-`unlock` will search the crypttab for mapper names (first column in /etc/crypttab) that
-start with the listed names.  Volumes that match via this method may have a keyfile listed
-in /etc/crypttab, it will be assumed that you want to unlock the volume/s with an alternative key.
-Note that the names provided are really wildcards, and by convention/default all mappers start with luks-,
-so you can force `unlock` to try all drives simply by doing something like `unlock luks-`.
-
-In all cases, `unlock` will only consider the process a success IFF all eligible volumes are unlocked
-successfully.  This means:
-  1. All the associated devices must be available at boot / unlock time
-  2. The passphrase must be accepted for all eligible volumes
-  3. cryptsetup luksOpen should not exit for any other reason.
-
-In short, if you have more than one volume in /etc/crypttab, you will need to be careful
-about how use this tool.
-
-If the process is successful, `unlock` will launch the script `/sbin/unlock-reap-success`.
-This can be found in the modules.d/earlyssh folder.  This will attempt to kill systemd-cryptsetup,
-and failing that, attempt to kill cryptroot-ask. On RHEL6 & 7, this aborts the builtin decrypt
-password request processes and allows the boot process to proceed. 
-Note that the plymouth splash screen on RHEL6 (if you happen to be watching the console...) will still appear to ask for your password, but this is an artificat.  Disable plymouth (rhgb command line) if this annoys you.
+### Remote unlock using the 'unlock' script
+  It essentially just calls /usr/bin/systemd-tty-ask-password-agent --query
+  But therer is a severe Bug to consider:
+  xxxx
 
 ### dracut.conf parameters
 
@@ -250,28 +197,6 @@ naming mixup, no traffic (e.g. unrelated connection issue), etc.
 
 ### TODO
 
-- Limited testing.  Original (before fork) only tested with customized source-based distro
-  ([Exherbo](http://exherbo.org/)), current version only tested with CentOS 6.5 and CentOS 7.0.
-  However, the configure script should allow it to be fairly adaptable to a range of distro's.
-
-- Need to document & form recommendations on how to unlock multiple systems using the unlock script.
-  Something with gpg-agent seems like it may work well.
-
-- `check()` in module_setup.sh should probably not be empty no-op.
-
-- Should probably have `set -e` or something alike (dracut-specific?) in install().
-
-- No idea how to sanely run `ssh-keygen` (openssh) from a script, maybe use
-  openssl instead?
-
-- Some notes on threat model where such thing might be useful would be nice, so
-  people won't assume too much.
-
-- Remote initramfs hash verification, etc.  See above point, a determined attacker could potentially
-  circumvent or fake the outputs of various commands in order to pretend that the verification had succeeded.
-  One possibility would be to dynamically upload a special hashing binary that has a compiled-in nonce.  This
-  would be hard to fake, I think.  However, it would require a compiler for each supported architecture on the
-  verification machine.
 
 
 ### Based on code, examples and ideas from
